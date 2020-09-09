@@ -3,6 +3,17 @@
 #include <sys/time.h>
 #include <stdio.h>
 
+#define CUDA_CHECK_RETURN(value)                                    \
+  {                                                                 \
+    cudaError_t _m_cudaStat = value;                                \
+    if (_m_cudaStat != cudaSuccess)                                 \
+    {                                                               \
+      fprintf(stderr, "Error %s at line %d in file %s\n",           \
+              cudaGetErrorString(_m_cudaStat), __LINE__, __FILE__); \
+      exit(1);                                                      \
+    }                                                               \
+  }
+
 enum
 {
   NELEMS = 1 << 10
@@ -27,6 +38,8 @@ int main()
   /* Allocate vectors on host */
   size_t size = sizeof(float) * NELEMS;
   double tgpu = 0, tmem = 0;
+  float elapsedTime = 0;
+  cudaEvent_t start, stop;
   float *h_A = (float *)malloc(size);
   float *h_B = (float *)malloc(size);
   float *h_C = (float *)malloc(size);
@@ -44,55 +57,35 @@ int main()
   /* Allocate vectors on device */
   float *d_A = NULL, *d_B = NULL, *d_C = NULL;
   tmem = -wtime();
-  if (cudaMalloc((void **)&d_A, size) != cudaSuccess)
-  {
-    fprintf(stderr, "Allocation error\n");
-    exit(EXIT_FAILURE);
-  }
-  if (cudaMalloc((void **)&d_B, size) != cudaSuccess)
-  {
-    fprintf(stderr, "Allocation error\n");
-    exit(EXIT_FAILURE);
-  }
-  if (cudaMalloc((void **)&d_C, size) != cudaSuccess)
-  {
-    fprintf(stderr, "Allocation error\n");
-    exit(EXIT_FAILURE);
-  }
+  CUDA_CHECK_RETURN(cudaMalloc((void **)&d_A, size));
+  CUDA_CHECK_RETURN(cudaMalloc((void **)&d_B, size));
+  CUDA_CHECK_RETURN(cudaMalloc((void **)&d_C, size));
 
   /* Copy the host vectors to device */
-  if (cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice) != cudaSuccess)
-  {
-    fprintf(stderr, "Host to device copying failed\n");
-    exit(EXIT_FAILURE);
-  }
-  if (cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice) != cudaSuccess)
-  {
-    fprintf(stderr, "Host to device copying failed\n");
-    exit(EXIT_FAILURE);
-  }
+  CUDA_CHECK_RETURN(cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice))
+  CUDA_CHECK_RETURN(cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice))
   tmem += wtime();
 
   /* Launch the kernel */
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
   tgpu = -wtime();
   int threadsPerBlock = 1024;
   int blocksPerGrid = (NELEMS + threadsPerBlock - 1) / threadsPerBlock;
+  cudaEventRecord(start,0);
   vadd<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, NELEMS);
-  cudaDeviceSynchronize();
+  cudaEventRecord(stop,0); 
+  cudaEventSynchronize(stop); 
+  CUDA_CHECK_RETURN(cudaDeviceSynchronize());
   tgpu += wtime();
+  CUDA_CHECK_RETURN(cudaGetLastError());
+  cudaEventElapsedTime(&elapsedTime,start,stop); 
 
-  if (cudaGetLastError() != cudaSuccess)
-  {
-    fprintf(stderr, "Failed to launch kernel!\n");
-    exit(EXIT_FAILURE);
-  }
+  cudaEventDestroy(start); 
+  cudaEventDestroy(stop); 
   /* Copy the device vectors to host */
   tmem -= wtime();
-  if (cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost) != cudaSuccess)
-  {
-    fprintf(stderr, "Device to host copying failed\n");
-    exit(EXIT_FAILURE);
-  }
+  CUDA_CHECK_RETURN(cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost));
   tmem += wtime();
 
   for (int i = 0; i < NELEMS; ++i)
@@ -111,9 +104,10 @@ int main()
   free(h_C);
   cudaDeviceReset();
 
-  printf("GPU version (sec.): %.6f\n", tgpu);
-  printf("Memory ops. (sec.): %.6f\n", tmem);
-  printf("Total time (sec.): %.6f\n", tgpu + tmem);
+  printf("GPU version (sec.): %.6lf\n", tgpu);
+  printf("Memory ops. (sec.): %.6lf\n", tmem);
+  printf("Total time (sec.): %.6lf\n", tgpu + tmem);
+  printf("Events Time %.6f\n", elapsedTime);
 
   return 0;
 }

@@ -16,7 +16,7 @@
 
 enum
 {
-  NELEMS = 1 << 10
+  NELEMS = 1 << 23
 };
 
 double wtime()
@@ -35,11 +35,11 @@ __global__ void vadd(const float *a, const float *b, float *c, int n)
 
 int main()
 {
-  /* Allocate vectors on host */
   size_t size = sizeof(float) * NELEMS;
   double tgpu = 0, tmem = 0;
   float elapsedTime = 0;
   cudaEvent_t start, stop;
+  /* Allocate vectors on host */
   float *h_A = (float *)malloc(size);
   float *h_B = (float *)malloc(size);
   float *h_C = (float *)malloc(size);

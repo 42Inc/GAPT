@@ -3,8 +3,10 @@
 #include <sys/time.h>
 #include <stdio.h>
 
-#define N 10
+#define N 128
 #define NELEMS (N * N)
+#define SCHEME 1
+#define TRANSP 0
 
 #define CUDA_CHECK_RETURN(value)                                    \
   {                                                                 \
@@ -76,13 +78,13 @@ int main()
   /* Copy the host vectors to device */
   CUDA_CHECK_RETURN(cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice))
   tmem += wtime();
-
   /* Launch the kernel */
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
   tgpu = -wtime();
-  int threadsPerBlock = 1024;
+  int threadsPerBlock = 256;
   int blocksPerGrid = (NELEMS + threadsPerBlock - 1) / threadsPerBlock;
+#if TRANSP == 1
   cudaEventRecord(start, 0);
   tr<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, N);
   cudaEventRecord(stop, 0);
@@ -116,7 +118,8 @@ int main()
   printf("Memory ops. (sec.): %.6lf\n", tmem);
   printf("Total time (sec.): %.6lf\n", tgpu + tmem);
   printf("Events Time %.6f\n", elapsedTime);
-
+#else
+#if SCHEME == 1
   /* Launch the kernel */
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
@@ -140,7 +143,7 @@ int main()
   printf("\nInit scheme 1\n");
   printf("GPU version (sec.): %.6lf\n", tgpu);
   printf("Events Time %.6f\n", elapsedTime);
-
+#else
   /* Launch the kernel */
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
@@ -164,7 +167,8 @@ int main()
   printf("\nInit scheme 2\n");
   printf("GPU version (sec.): %.6lf\n", tgpu);
   printf("Events Time %.6f\n", elapsedTime);
-
+#endif
+#endif
   cudaFree(d_A);
   cudaFree(d_B);
   free(h_A);

@@ -6,7 +6,7 @@
 #define N 128
 #define NELEMS (N * N)
 #define SCHEME 1
-#define TRANSP 0
+#define TRANSP 1
 
 #define CUDA_CHECK_RETURN(value)                                    \
   {                                                                 \
@@ -85,8 +85,13 @@ int main()
   int threadsPerBlock = 256;
   int blocksPerGrid = (NELEMS + threadsPerBlock - 1) / threadsPerBlock;
 #if TRANSP == 1
+  int threadsPerBlockDim = 32;
+  dim3 blockDim(threadsPerBlockDim, threadsPerBlockDim, 1);
+  int blocksPerGridDimX = ceilf(N / (float)threadsPerBlockDim);
+  int blocksPerGridDimY = ceilf(N / (float)threadsPerBlockDim);
+  dim3 gridDim(blocksPerGridDimX, blocksPerGridDimY, 1);
   cudaEventRecord(start, 0);
-  tr<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, N);
+  tr<<<gridDim, blockDim>>>(d_A, d_B, N);
   cudaEventRecord(stop, 0);
   cudaEventSynchronize(stop);
   CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -103,14 +108,14 @@ int main()
 
   for (int i = 0; i < N; ++i)
   {
-  for (int j = 0; i < N; ++i)
-    if (fabs(h_A[i*N +j] - h_B[j*N + i]) > 1e-5)
-    {
-      fprintf(stderr,
-              "Result verification failed at element %d,%d! Ex: %f, Real: %f\n",
-              i, h_A[i*N +j], h_B[j*N + i]);
-      exit(EXIT_FAILURE);
-    }
+    for (int j = 0; j < N; ++j)
+      if (fabs(h_A[i * N + j] - h_B[j * N + i]) > 1e-5)
+      {
+        fprintf(stderr,
+                "Result verification failed at element %d , %d! Ex: %f, Real: %f\n",
+                i, j, h_A[i * N + j], h_B[j * N + i]);
+        exit(EXIT_FAILURE);
+      }
   }
 
   printf("Transponse\n");

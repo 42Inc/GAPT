@@ -48,7 +48,7 @@ __global__ void tr2(const float *a, float *b, int n)
 
 __global__ void tr3(const float *a, float *b, int n)
 {
-  __shared__ float smem[BLOCK][BLOCK];
+  __shared__ float smem[BLOCK][BLOCK + 1];
   int i = threadIdx.x + blockDim.x * blockIdx.x;
   int j = threadIdx.y + blockDim.y * blockIdx.y;
   if ((i < n) && (j < n))

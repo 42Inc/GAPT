@@ -3,9 +3,9 @@
 #include <sys/time.h>
 #include <stdio.h>
 
-#define N 128
+#define N 512
 #define NELEMS (N * N)
-#define TRANSP 3
+#define TRANSP 1
 #define BLOCK 32
 
 #define CUDA_CHECK_RETURN(value)                                    \
@@ -26,7 +26,7 @@ double wtime()
   return (double)t.tv_sec + (double)t.tv_usec * 1E-6;
 }
 
-__global__ void tr1(const float *a, float *b, int n)
+__global__ void tr1(float *a, float *b, int n)
 {
   int i = threadIdx.x + blockDim.x * blockIdx.x;
   int j = threadIdx.y + blockDim.y * blockIdx.y;
@@ -34,28 +34,28 @@ __global__ void tr1(const float *a, float *b, int n)
     b[j * n + i] = a[i * n + j];
 }
 
-__global__ void tr2(const float *a, float *b, int n)
+__global__ void tr2(float *a, float *b, int n)
 {
   __shared__ float smem[BLOCK][BLOCK];
-  int i = threadIdx.x + blockDim.x * blockIdx.x;
-  int j = threadIdx.y + blockDim.y * blockIdx.y;
-  if ((i < n) && (j < n))
-    smem[threadIdx.y][threadIdx.x] = a[i * n + j];
+  int i = threadIdx.x + blockIdx.x * blockDim.x;
+  int j = threadIdx.y + blockIdx.y * blockDim.y;
+  smem[threadIdx.y][threadIdx.x] = a[i + j * n];
   __syncthreads();
-  if ((i < n) && (j < n))
-    b[j * n + i] = smem[threadIdx.y][threadIdx.x];
+  i = threadIdx.x + blockIdx.y * blockDim.x;
+  j = threadIdx.y + blockIdx.x * blockDim.y;
+  b[i + j * n] = smem[threadIdx.x][threadIdx.y];
 }
 
-__global__ void tr3(const float *a, float *b, int n)
+__global__ void tr3(float *a, float *b, int n)
 {
   __shared__ float smem[BLOCK][BLOCK + 1];
-  int i = threadIdx.x + blockDim.x * blockIdx.x;
-  int j = threadIdx.y + blockDim.y * blockIdx.y;
-  if ((i < n) && (j < n))
-    smem[threadIdx.y][threadIdx.x] = a[i * n + j];
+  int i = threadIdx.x + blockIdx.x * blockDim.x;
+  int j = threadIdx.y + blockIdx.y * blockDim.y;
+  smem[threadIdx.y][threadIdx.x] = a[i + j * n];
   __syncthreads();
-  if ((i < n) && (j < n))
-    b[j * n + i] = smem[threadIdx.y][threadIdx.x];
+  i = threadIdx.x + blockIdx.y * blockDim.x;
+  j = threadIdx.y + blockIdx.x * blockDim.y;
+  b[i + j * n] = smem[threadIdx.x][threadIdx.y];
 }
 
 int main()
@@ -64,6 +64,7 @@ int main()
   double tgpu = 0, tmem = 0;
   float elapsedTime = 0;
   cudaEvent_t start, stop;
+
   /* Allocate vectors on host */
   float *h_A = (float *)malloc(size);
   float *h_B = (float *)malloc(size);
@@ -96,13 +97,13 @@ int main()
   int blocksPerGridDimY = ceilf(N / (float)threadsPerBlockDim);
   dim3 gridDim(blocksPerGridDimX, blocksPerGridDimY, 1);
   cudaEventRecord(start, 0);
-#if TRANSP == 1
+  // #if TRANSP == 1
   tr1<<<gridDim, blockDim>>>(d_A, d_B, N);
-#elif TRANSP == 2
+  // #elif TRANSP == 2
   tr2<<<gridDim, blockDim>>>(d_A, d_B, N);
-#else
+  // #else
   tr3<<<gridDim, blockDim>>>(d_A, d_B, N);
-#endif
+  // #endif
   cudaEventRecord(stop, 0);
   cudaEventSynchronize(stop);
   CUDA_CHECK_RETURN(cudaDeviceSynchronize());
